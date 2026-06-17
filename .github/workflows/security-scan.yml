@@ -1,0 +1,144 @@
+# ---------------------------------------------------------------------------
+# Security Scan Pipeline (SAST / SCA / IaC)
+#
+# Runs four open-source security scanners on every push and pull request:
+#   - Semgrep  (SAST)  - static analysis of source code
+#   - Grype    (SCA)   - known CVEs in dependencies
+#   - Trivy    (SCA + config) - dependencies, IaC and image misconfig
+#   - Checkov  (IaC)   - misconfigurations in Dockerfile / Kubernetes
+#
+# Design decisions (see docs/technical-decisions.md for the rationale):
+#   - Actions pinned by commit SHA (supply-chain hardening vs tag retargeting).
+#   - Scanner tools pinned by exact version, passed as an ARGUMENT to the
+#     install script (the URL alone does NOT pin - it fetches latest).
+#   - Monitoring mode: scanners use continue-on-error so findings are visible
+#     without blocking merges while the team triages the backlog.
+#   - Results exported as SARIF and uploaded as artifacts for review.
+#   - pip and tool binaries cached to cut runtime and cost.
+# ---------------------------------------------------------------------------
+name: Security Scan
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - name: Install Semgrep
+        run: pip install semgrep==1.165.0
+      - name: Run Semgrep
+        continue-on-error: true
+        run: semgrep scan --config auto --severity ERROR --severity WARNING --sarif-output=semgrep-results.sarif .
+      - name: Upload Semgrep SARIF
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: semgrep-sarif-report
+          path: semgrep-results.sarif
+          if-no-files-found: warn
+          retention-days: 7
+
+  grype:
+    name: Grype SCA
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Cache Grype binary
+        id: cache-grype
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: /usr/local/bin/grype
+          key: grype-v0.104.1
+      - name: Install Grype
+        if: steps.cache-grype.outputs.cache-hit != 'true'
+        run: curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin v0.104.1
+      - name: Run Grype
+        continue-on-error: true
+        run: grype dir:. -o table -o sarif=grype-results.sarif
+      - name: Upload Grype SARIF
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: grype-sarif-report
+          path: grype-results.sarif
+          if-no-files-found: warn
+          retention-days: 7
+
+  trivy:
+    name: Trivy Scanner
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Cache Trivy binary
+        id: cache-trivy
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: /usr/local/bin/trivy
+          key: trivy-v0.71.0
+      - name: Install Trivy
+        if: steps.cache-trivy.outputs.cache-hit != 'true'
+        run: curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.71.0
+      - name: Run Trivy
+        continue-on-error: true
+        run: |
+          trivy fs . --severity CRITICAL,HIGH --format json --output trivy-report.json
+          trivy convert --format table trivy-report.json
+          trivy convert --format sarif --output trivy-results.sarif trivy-report.json
+      - name: Upload Trivy SARIF
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: trivy-sarif-report
+          path: trivy-results.sarif
+          if-no-files-found: warn
+          retention-days: 7
+
+  checkov:
+    name: Checkov IaC
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - name: Install Checkov
+        run: pip install checkov==3.2.533
+      - name: Run Checkov
+        continue-on-error: true
+        run: checkov -d . -o cli -o sarif --output-file-path console,checkov-results.sarif
+      - name: Upload Checkov SARIF
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: checkov-sarif-report
+          path: checkov-results.sarif
+          if-no-files-found: warn
+          retention-days: 7
