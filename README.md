@@ -1,5 +1,9 @@
 # DevSecOps Security Pipeline Demo
 
+[![Security Scan](https://github.com/falecomkauan/devsecops-pipeline-demo/actions/workflows/security-scan.yml/badge.svg)](https://github.com/falecomkauan/devsecops-pipeline-demo/actions/workflows/security-scan.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Python](https://img.shields.io/badge/python-3.12-blue.svg)
+
 A reference implementation of a **shift-left security pipeline** for CI/CD,
 running four open-source scanners on every push and pull request. Built to
 demonstrate how to integrate SAST, SCA and IaC scanning into GitHub Actions
