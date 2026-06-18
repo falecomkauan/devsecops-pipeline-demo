@@ -48,7 +48,7 @@ jobs:
         run: pip install semgrep==1.165.0
       - name: Run Semgrep
         continue-on-error: true
-        run: semgrep scan --config auto --severity ERROR --severity WARNING --sarif-output=semgrep-results.sarif .
+        run: semgrep scan --config auto --config .semgrep/ --severity ERROR --severity WARNING --sarif-output=semgrep-results.sarif .
       - name: Upload Semgrep SARIF
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: always()

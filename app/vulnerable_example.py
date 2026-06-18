@@ -63,3 +63,15 @@ if __name__ == "__main__":
     # Demonstration entrypoint (not meant to be run in production).
     print("This is an intentionally vulnerable demo module.")
     print("Environment:", os.environ.get("APP_ENV", "dev"))
+
+# ---------------------------------------------------------------------------
+# 6. HTTP request without timeout (custom rule: requests-without-timeout)
+#    Fix: always pass an explicit timeout, e.g. requests.get(url, timeout=10).
+# ---------------------------------------------------------------------------
+import requests
+
+
+def fetch_status(url: str):
+    # VULNERABLE: no timeout - can hang forever on a slow/unresponsive host.
+    response = requests.get(url)
+    return response.status_code

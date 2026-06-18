@@ -1,0 +1,31 @@
+rules:
+  - id: requests-without-timeout
+    languages: [python]
+    severity: WARNING
+    message: >
+      HTTP call using the 'requests' library without a timeout. A missing
+      timeout can hang the calling thread indefinitely if the remote host is
+      slow or unresponsive, which is a denial-of-service risk. Always pass an
+      explicit timeout, e.g. requests.get(url, timeout=10).
+    metadata:
+      category: security
+      cwe: "CWE-400: Uncontrolled Resource Consumption"
+      references:
+        - https://requests.readthedocs.io/en/latest/user/advanced/#timeouts
+      author: Kauan Rocha
+    patterns:
+      - pattern-either:
+          - pattern: requests.get(...)
+          - pattern: requests.post(...)
+          - pattern: requests.put(...)
+          - pattern: requests.delete(...)
+          - pattern: requests.patch(...)
+          - pattern: requests.head(...)
+          - pattern: requests.request(...)
+      - pattern-not: requests.get(..., timeout=$T, ...)
+      - pattern-not: requests.post(..., timeout=$T, ...)
+      - pattern-not: requests.put(..., timeout=$T, ...)
+      - pattern-not: requests.delete(..., timeout=$T, ...)
+      - pattern-not: requests.patch(..., timeout=$T, ...)
+      - pattern-not: requests.head(..., timeout=$T, ...)
+      - pattern-not: requests.request(..., timeout=$T, ...)
